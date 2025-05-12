@@ -5,11 +5,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 import os
-import time
-from datetime import datetime
+import time as t
+from datetime import datetime, time
 from webdriver_manager.chrome import ChromeDriverManager
+import pytz
 import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
+
 
 # Install required packages
 import subprocess
@@ -43,6 +45,15 @@ stocks =["tesla", "apple", "nvidia","Manchester", "google", "nike" ]
 
 class WebAutomation:
 
+    @staticmethod
+    def is_market_open():
+        market_operating_timezone = pytz.timezone("US/Eastern")
+        now_et = datetime.now(market_operating_timezone).time()
+        market_open = time(9,30)
+        market_close = time(16,00)
+        return market_open <= now_et <= market_close
+
+
     def get_data(self,stock_name):
         price = None
         price_text = "N/A"
@@ -52,6 +63,16 @@ class WebAutomation:
         # Define driver options
         chrome_options = Options()
         chrome_options.add_argument("--disable-search-engine-choice-screen")
+
+        # Run chrome in background without pop-up window
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
 
         # Set download path to current directory
         download_path = os.getcwd()
@@ -70,10 +91,15 @@ class WebAutomation:
             driver.get(url)
 
             # Add a small delay to ensure page loads
-            time.sleep(3)
+            t.sleep(3)
+
+            # Wait for the page to fully load
+            WebDriverWait(driver, 10).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
 
             # Wait for price element to load (timeout after 10 seconds)
-            wait = WebDriverWait(driver, 10)
+            wait= WebDriverWait(driver,10)
             price_element = wait.until(
                 EC.presence_of_element_located((By.CLASS_NAME, "price-font-weight"))
             )
@@ -106,11 +132,13 @@ class WebAutomation:
     def save_to_excel(self, stock_name, price_float, price_text, timestamp):
         """Save the stock price data to an Excel file with timestamp"""
         # Create a new dataframe with this data point
+        note = "Market Open" if WebAutomation.is_market_open() else "Market Closed or Stale Data"
         new_data = pd.DataFrame({
             'Date': [timestamp.strftime('%Y-%m-%d')],
             'Time': [timestamp.strftime('%H:%M:%S')],
             'Price Text': [price_text],
-            'Price Float': [price_float]
+            'Price Float': [price_float],
+            'Note': [note]
         })
 
         try:
