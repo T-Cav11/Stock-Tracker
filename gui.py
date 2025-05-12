@@ -1,7 +1,5 @@
 import io
-
 import requests
-
 from main import StockScraper, ExcelLogger
 import sys
 import os
@@ -9,12 +7,10 @@ import pandas as pd
 import plotly.graph_objs as go
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout,
                              QHBoxLayout, QPushButton, QWidget,
-                             QComboBox, QLabel, QMessageBox, QProgressDialog)
+                             QComboBox, QLabel, QMessageBox, QProgressDialog, QFrame, QSizePolicy)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl, QThread, pyqtSignal, Qt
 from PyQt5.QtGui import QPixmap
-from datetime import datetime
-import pytz
 
 
 stocks = ["Tesla", "Apple", "Nvidia", "Google", "Nike", "Manchester"]
@@ -33,7 +29,7 @@ company_logos = {
 class ScrapeAllWorker(QThread):
     """Worker Thread to handle scraping all stocks"""
     progress_signal = pyqtSignal(str)
-    finished_signal = pyqtSignal
+    finished_signal = pyqtSignal()
 
     def run(self):
         for stock in stocks:
@@ -89,21 +85,38 @@ class StockDataVisualizer(QMainWindow):
         close_button.setStyleSheet("background-color: #ff6b6b;")
         control_layout.addWidget(close_button)
 
-        # Logo display
-        logo_layout = QHBoxLayout()
-        main_layout.addLayout(logo_layout)
-        self.logo_label = QLabel("Company Logo")
-        self.logo_label.setAlignment(Qt.AlignCenter)
-        self.logo_label.setMinimumHeight(50)
+        # Create container for graph and logo overlay
+        graph_container = QFrame()
+        graph_container.setFrameShape(QFrame.StyledPanel)
+        graph_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        graph_layout = QVBoxLayout(graph_container)
+        graph_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(graph_container, stretch=10)
+
+        # Logo container at the top right
+        logo_container = QWidget()
+        logo_layout = QHBoxLayout(logo_container)
+        logo_layout.setContentsMargins(0, 0, 10, 0)
+        logo_layout.addStretch()
+
+        # Logo label
+        self.logo_label = QLabel()
+        self.logo_label.setFixedSize(80, 80)
+        self.logo_label.setStyleSheet("background-color: rgba(255, 255, 255, 180);")
         logo_layout.addWidget(self.logo_label)
+
+        # Add logo container to the top of the graph layout
+        graph_layout.addWidget(logo_container, alignment=Qt.AlignTop | Qt.AlignRight)
 
         # Plotly WebEngine View for rendering graphs
         self.web_view = QWebEngineView()
-        main_layout.addWidget(self.web_view)
+        self.web_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        graph_layout.addWidget(self.web_view)
 
-        # Status Message
+        # Status message
         self.status_label = QLabel("Ready")
         self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setMaximumHeight(30)
         main_layout.addWidget(self.status_label)
 
         # Initialize with first stock
@@ -115,10 +128,10 @@ class StockDataVisualizer(QMainWindow):
             url = company_logos[stock_name]
             response = requests.get(url)
             if response.status_code == 200:
-                logo_data = io.BytesIO(response._content)
+                logo_data = io.BytesIO(response.content)
                 pixmap = QPixmap()
                 pixmap.loadFromData(logo_data.getvalue())
-                scaled_pixmap = pixmap.scaled(100,100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                scaled_pixmap = pixmap.scaled(80,80, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.logo_label.setPixmap(scaled_pixmap)
                 return
 
@@ -217,9 +230,11 @@ class StockDataVisualizer(QMainWindow):
             plot_url = QUrl.fromLocalFile(plot_path)
             self.web_view.load(plot_url)
 
+            # Make sure logo is above the web view
+            self.logo_label.raise_()
+
         except Exception as e:
             print(f'Error visualizing data: {e}')
-
 
 
 def main():
