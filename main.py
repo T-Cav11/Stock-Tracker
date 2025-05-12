@@ -8,6 +8,8 @@ import os
 import time
 from datetime import datetime
 from webdriver_manager.chrome import ChromeDriverManager
+import warnings
+warnings.simplefilter(action='ignore', category=UserWarning)
 
 # Install required packages
 import subprocess
@@ -33,12 +35,20 @@ for package in required_packages:
 # Import pandas after ensuring it's installed
 import pandas as pd
 
-URL = "https://digital.fidelity.com/search/main?q=tesla&ccsource=ss"
-EXCEL_FILE = "tesla_stock_data.xlsx"
+URL_TEMPLATE = "https://digital.fidelity.com/search/main?q={}&ccsource=ss"
+EXCEL_FILE = "stock_data.xlsx"
+
+stocks =["tesla", "apple", "nvidia","Manchester", "google", "nike" ]
 
 
 class WebAutomation:
-    def __init__(self):
+
+    def get_data(self,stock_name):
+        price = None
+        price_text = "N/A"
+        timestamp = datetime.now()
+        url = URL_TEMPLATE.format(stock_name)
+
         # Define driver options
         chrome_options = Options()
         chrome_options.add_argument("--disable-search-engine-choice-screen")
@@ -49,32 +59,28 @@ class WebAutomation:
         chrome_options.add_experimental_option('prefs', prefs)
 
         # Initialize the driver with ChromeDriverManager to handle driver version
-        self.driver = webdriver.Chrome(
+        driver = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()),
             options=chrome_options
         )
 
-    def get_data(self):
-        price = None
-        price_text = "N/A"
-        timestamp = datetime.now()
-
         try:
             # Navigate to URL
-            self.driver.get(URL)
+
+            driver.get(url)
 
             # Add a small delay to ensure page loads
             time.sleep(3)
 
             # Wait for price element to load (timeout after 10 seconds)
-            wait = WebDriverWait(self.driver, 10)
+            wait = WebDriverWait(driver, 10)
             price_element = wait.until(
                 EC.presence_of_element_located((By.CLASS_NAME, "price-font-weight"))
             )
 
             # Extract the price
             price_text = price_element.text
-            print(f"Tesla stock price: {price_text} captured at {timestamp}")
+            print(f"{stock_name.title()} stock price: {price_text} captured at {timestamp}")
 
             # Convert price text to float (removing $ and commas)
             if price_text:
@@ -85,18 +91,19 @@ class WebAutomation:
                     print(f"Could not convert price '{price_text}' to float")
 
             # Save to Excel
-            self.save_to_excel(price, price_text, timestamp)
+            self.save_to_excel(stock_name,price, price_text, timestamp)
+            print(f"Data for {stock_name} successfully saved in {EXCEL_FILE}")
 
         except Exception as e:
-            print(f"An error occurred: {e}")
-            # Still try to save to Excel with None as price
-            self.save_to_excel(price, price_text, timestamp)
+            print(f"An error occurred retrieving {stock_name.title()} stock price: {e}")
+
 
         finally:
             # Always close the driver when done
-            self.driver.quit()
+            driver.quit()
 
-    def save_to_excel(self, price_float, price_text, timestamp):
+
+    def save_to_excel(self, stock_name, price_float, price_text, timestamp):
         """Save the stock price data to an Excel file with timestamp"""
         # Create a new dataframe with this data point
         new_data = pd.DataFrame({
@@ -109,22 +116,30 @@ class WebAutomation:
         try:
             # Check if file exists
             if os.path.exists(EXCEL_FILE):
-                # Read existing data
-                existing_data = pd.read_excel(EXCEL_FILE)
-                # Append new data
-                updated_data = pd.concat([existing_data, new_data], ignore_index=True)
-            else:
-                updated_data = new_data
+                with pd.ExcelWriter(EXCEL_FILE, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+                    try:
+                        # Read existing data
+                        existing_data = pd.read_excel(EXCEL_FILE, sheet_name=stock_name)
+                        # Append new data
+                        updated_data = pd.concat([existing_data, new_data], ignore_index=True)
+                    except ValueError:
+                        # Create sheet if it doesn't exist yet
+                        updated_data = new_data
 
-            # Save to Excel
-            updated_data.to_excel(EXCEL_FILE, index=False)
-            print(f"Data successfully saved to {EXCEL_FILE}")
+                    updated_data.to_excel(writer, sheet_name=stock_name, index=False)
+
+            else:
+                with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
+                    new_data.to_excel(writer, sheet_name=stock_name, index=False)
 
         except Exception as e:
-            print(f"Error saving to Excel: {e}")
+            print(f"Error saving {stock_name} data: {e}")
 
 
 # Create an instance and run
 if __name__ == "__main__":
     bot = WebAutomation()
-    bot.get_data()
+    for stock in stocks:
+        bot.get_data(stock)
+
+    print("Process Completed!")
