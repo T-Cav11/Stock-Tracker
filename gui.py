@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.graph_objs as go
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout,
                              QHBoxLayout, QPushButton, QWidget,
-                             QComboBox, QLabel, QMessageBox, QProgressDialog, QFrame, QSizePolicy)
+                             QComboBox, QLabel, QMessageBox, QProgressDialog, QFrame, QSizePolicy, QStackedLayout)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl, QThread, pyqtSignal, Qt
 from PyQt5.QtGui import QPixmap
@@ -89,29 +89,27 @@ class StockDataVisualizer(QMainWindow):
         graph_container = QFrame()
         graph_container.setFrameShape(QFrame.StyledPanel)
         graph_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        graph_layout = QVBoxLayout(graph_container)
-        graph_layout.setContentsMargins(0, 0, 0, 0)
+        graph_layout = QStackedLayout(graph_container)
         main_layout.addWidget(graph_container, stretch=10)
-
-        # Logo container at the top right
-        logo_container = QWidget()
-        logo_layout = QHBoxLayout(logo_container)
-        logo_layout.setContentsMargins(0, 0, 10, 0)
-        logo_layout.addStretch()
-
-        # Logo label
-        self.logo_label = QLabel()
-        self.logo_label.setFixedSize(80, 80)
-        self.logo_label.setStyleSheet("background-color: rgba(255, 255, 255, 180);")
-        logo_layout.addWidget(self.logo_label)
-
-        # Add logo container to the top of the graph layout
-        graph_layout.addWidget(logo_container, alignment=Qt.AlignTop | Qt.AlignRight)
 
         # Plotly WebEngine View for rendering graphs
         self.web_view = QWebEngineView()
         self.web_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         graph_layout.addWidget(self.web_view)
+
+
+        # Logo label
+        self.logo_label = QLabel(graph_container)
+        self.logo_label.setFixedSize(80, 80)
+        self.logo_label.move(graph_container.width() - 120, 20)
+        self.logo_label.setStyleSheet("""
+            background-color: rgba(255, 255, 255, 200);
+            border-radius: 10px;
+            padding: 5px;
+        """)
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        self.logo_label.raise_()  # Ensure it's on top
+
 
         # Status message
         self.status_label = QLabel("Ready")
@@ -236,6 +234,10 @@ class StockDataVisualizer(QMainWindow):
         except Exception as e:
             print(f'Error visualizing data: {e}')
 
+    def resizeEvent(self, event):
+        # Keep logo in top-right corner
+        self.logo_label.move(self.width() - 120, 20)
+        super().resizeEvent(event)
 
 def main():
     app = QApplication(sys.argv)
