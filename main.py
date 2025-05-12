@@ -124,7 +124,7 @@ def main():
 
     # main execution logic
     EXCEL_FILE = "stock_data.xlsx"
-    stocks = ["tesla", "apple", "nvidia", "Manchester", "google", "nike"]
+    stocks = ["Tesla", "Apple", "Nvidia", "Manchester", "Google", "Nike"]
 
     for stock in stocks:
         scraper = StockScraper()
