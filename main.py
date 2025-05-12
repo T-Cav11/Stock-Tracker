@@ -12,54 +12,13 @@ import pytz
 import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
 
-
-# Install required packages
-import subprocess
-import sys
-import importlib
-
-
-def install_package(package):
-    print(f"Installing {package}...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-    print(f"{package} installed successfully")
-
-
-# Check and install required packages
-required_packages = ["pandas", "openpyxl"]
-for package in required_packages:
-    try:
-        importlib.import_module(package)
-        print(f"{package} is already installed")
-    except ImportError:
-        install_package(package)
-
-# Import pandas after ensuring it's installed
 import pandas as pd
-
 URL_TEMPLATE = "https://digital.fidelity.com/search/main?q={}&ccsource=ss"
-EXCEL_FILE = "stock_data.xlsx"
-
-stocks =["tesla", "apple", "nvidia","Manchester", "google", "nike" ]
 
 
-class WebAutomation:
-
+class DriverManager:
     @staticmethod
-    def is_market_open():
-        market_operating_timezone = pytz.timezone("US/Eastern")
-        now_et = datetime.now(market_operating_timezone).time()
-        market_open = time(9,30)
-        market_close = time(16,00)
-        return market_open <= now_et <= market_close
-
-
-    def get_data(self,stock_name):
-        price = None
-        price_text = "N/A"
-        timestamp = datetime.now()
-        url = URL_TEMPLATE.format(stock_name)
-
+    def create_driver():
         # Define driver options
         chrome_options = Options()
         chrome_options.add_argument("--disable-search-engine-choice-screen")
@@ -79,61 +38,63 @@ class WebAutomation:
         prefs = {'download.default_directory': download_path}
         chrome_options.add_experimental_option('prefs', prefs)
 
-        # Initialize the driver with ChromeDriverManager to handle driver version
-        driver = webdriver.Chrome(
+        return webdriver.Chrome(
             service=Service(ChromeDriverManager().install()),
             options=chrome_options
         )
 
+
+class StockScraper:
+    def __init__(self):
+        self.driver = DriverManager.create_driver()
+
+    # Get the stock price from the URL
+    def get_price(self,stock_name):
+        price = None
+        price_text = "N/A"
+        timestamp = datetime.now()
+        url = URL_TEMPLATE.format(stock_name)
+
         try:
-            # Navigate to URL
 
-            driver.get(url)
-
-            # Add a small delay to ensure page loads
-            t.sleep(3)
-
-            # Wait for the page to fully load
-            WebDriverWait(driver, 10).until(
+            self.driver.get(url)
+            WebDriverWait(self.driver, 15).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
             )
-
-            # Wait for price element to load (timeout after 10 seconds)
-            wait= WebDriverWait(driver,10)
-            price_element = wait.until(
+            element = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CLASS_NAME, "price-font-weight"))
             )
+            price_text = element.text
+            price = float(price_text.replace('$', '').replace(',', ''))
 
-            # Extract the price
-            price_text = price_element.text
-            print(f"{stock_name.title()} stock price: {price_text} captured at {timestamp}")
-
-            # Convert price text to float (removing $ and commas)
-            if price_text:
-                clean_price = price_text.replace('$', '').replace(',', '')
-                try:
-                    price = float(clean_price)
-                except ValueError:
-                    print(f"Could not convert price '{price_text}' to float")
-
-            # Save to Excel
-            self.save_to_excel(stock_name,price, price_text, timestamp)
-            print(f"Data for {stock_name} successfully saved in {EXCEL_FILE}")
-
+            print(f"Stock data for {stock_name} is {price_text} at {timestamp}")
         except Exception as e:
-            print(f"An error occurred retrieving {stock_name.title()} stock price: {e}")
+            print(f"Error fetching price for {stock_name}: {e}")
+        return price, price_text, timestamp
+
+    # Close the driver
+    def close(self):
+        self.driver.quit()
 
 
-        finally:
-            # Always close the driver when done
-            driver.quit()
+class ExcelLogger:
 
+    # Check if the market is open
+    @staticmethod
+    def is_market_open():
+        market_operating_timezone = pytz.timezone("US/Eastern")
+        now_et = datetime.now(market_operating_timezone).time()
+        market_open = time(9, 30)
+        market_close = time(16, 00)
+        return market_open <= now_et <= market_close
 
-    def save_to_excel(self, stock_name, price_float, price_text, timestamp):
+    # Save the data to the excel sheet
+    @staticmethod
+    def save(stock_name, price_float, price_text, timestamp, file_path):
         """Save the stock price data to an Excel file with timestamp"""
         # Create a new dataframe with this data point
-        note = "Market Open" if WebAutomation.is_market_open() else "Market Closed or Stale Data"
-        new_data = pd.DataFrame({
+        note = "Market Open" if ExcelLogger.is_market_open() else "Market Closed or Stale Data"
+        df = pd.DataFrame({
             'Date': [timestamp.strftime('%Y-%m-%d')],
             'Time': [timestamp.strftime('%H:%M:%S')],
             'Price Text': [price_text],
@@ -142,32 +103,37 @@ class WebAutomation:
         })
 
         try:
-            # Check if file exists
-            if os.path.exists(EXCEL_FILE):
-                with pd.ExcelWriter(EXCEL_FILE, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+            if os.path.exists(file_path):
+                with pd.ExcelWriter(file_path, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
                     try:
-                        # Read existing data
-                        existing_data = pd.read_excel(EXCEL_FILE, sheet_name=stock_name)
-                        # Append new data
-                        updated_data = pd.concat([existing_data, new_data], ignore_index=True)
+                        existing = pd.read_excel(file_path, sheet_name=stock_name)
+                        df = pd.concat([existing, df], ignore_index=True)
                     except ValueError:
-                        # Create sheet if it doesn't exist yet
-                        updated_data = new_data
-
-                    updated_data.to_excel(writer, sheet_name=stock_name, index=False)
-
+                        pass  # Sheet doesn't exist, will be created
+                    df.to_excel(writer, sheet_name=stock_name, index=False)
+                    print(f"{stock_name} data saved to {file_path}")
             else:
-                with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
-                    new_data.to_excel(writer, sheet_name=stock_name, index=False)
-
+                with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+                    df.to_excel(writer, sheet_name=stock_name, index=False)
+                print(f"{stock_name} data saved to {file_path}")
         except Exception as e:
-            print(f"Error saving {stock_name} data: {e}")
+            print(f"Error saving data for {stock_name}: {e}")
 
+
+def main():
+
+    # main execution logic
+    EXCEL_FILE = "stock_data.xlsx"
+    stocks = ["tesla", "apple", "nvidia", "Manchester", "google", "nike"]
+
+    for stock in stocks:
+        scraper = StockScraper()
+        price, price_text, timestamp = scraper.get_price(stock)
+        ExcelLogger.save(stock, price, price_text, timestamp, EXCEL_FILE)
+        scraper.close()
+
+    print("✅ All stock data retrieved and saved.")
 
 # Create an instance and run
 if __name__ == "__main__":
-    bot = WebAutomation()
-    for stock in stocks:
-        bot.get_data(stock)
-
-    print("Process Completed!")
+  main()
