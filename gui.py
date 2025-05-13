@@ -15,6 +15,7 @@ from PyQt5.QtGui import QPixmap
 
 stocks = ["Tesla", "Apple", "Nvidia", "Google", "Nike", "Manchester"]
 file = "stock_data.xlsx"
+graph_types = ["Line Chart", "Candlestick", "Bar Chart", "Area Chart"]
 
 # Company logos - simplified mapping
 company_logos = {
@@ -68,6 +69,12 @@ class StockDataVisualizer(QMainWindow):
         self.stock_selector.addItems(stocks)
         control_layout.addWidget(QLabel("Select Stock:"))
         control_layout.addWidget(self.stock_selector)
+
+        # Graph type selection dropdown
+        self.graph_type_selector = QComboBox()
+        self.graph_type_selector.addItems(graph_types)
+        control_layout.addWidget(QLabel("Select Graph Type:"))
+        control_layout.addWidget(self.graph_type_selector)
 
         # Fetch button
         fetch_button = QPushButton("Fetch and Plot Stock Price")
@@ -204,13 +211,50 @@ class StockDataVisualizer(QMainWindow):
             # Sort by datetime to ensure chronological order
             df = df.sort_values('DateTime')
 
-            # Create Plotly figure
-            fig = go.Figure(data=[go.Scatter(
-                x=df['DateTime'],
-                y=df['Price Float'],
-                mode='lines+markers',
-                name=stock_name.upper()
-            )])
+            # Get the selected graph type
+            graph_type = self.graph_type_selector.currentText()
+
+            # Create Plotly figure based on selected graph type
+            fig = go.Figure()
+
+            if graph_type == "Line Chart":
+                fig.add_trace(go.Scatter(
+                    x=df['DateTime'],
+                    y=df['Price Float'],
+                    mode='lines+markers',
+                    name=stock_name.upper()
+                ))
+
+            elif graph_type == "Candlestick":
+                df['High'] = df['Price Float'] * 1.01  # 1% higher for demo
+                df['Low'] = df['Price Float'] * 0.99  # 1% lower for demo
+
+                fig.add_trace(go.Candlestick(
+                    x=df['DateTime'],
+                    open=df['Price Float'],
+                    high=df['High'],
+                    low=df['Low'],
+                    close=df['Price Float'],
+                    name=stock_name.upper()
+                ))
+
+            elif graph_type == "Bar Chart":
+                fig.add_trace(go.Bar(
+                    x=df['DateTime'],
+                    y=df['Price Float'],
+                    name=stock_name.upper(),
+                    marker_color = 'rgb(55,83,109)',
+                    opacity=0.8
+                ))
+
+            elif graph_type == "Area Chart":
+                fig.add_trace(go.Scatter(
+                    x=df['DateTime'],
+                    y=df['Price Float'],
+                    fill='tozeroy',
+                    name=stock_name.upper()
+                ))
+
 
             # Customize Layout
             fig.update_layout(
